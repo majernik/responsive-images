@@ -77,10 +77,15 @@ class ResponsiveImageRenderer implements FileRendererInterface
             $options[self::OPTIONS_IMAGE_RELATVE_WIDTH_KEY] = (float)$GLOBALS['TSFE']->register[self::REGISTER_IMAGE_RELATVE_WIDTH_KEY];
         }
 
+        $config = $this->getConfig();
+        if ($width !== null || $height !== null) {
+            $config = $this->overrideDefaultDimensions($config, $width, $height);
+        }
+
         $view = $this->initializeView();
         $view->assignMultiple([
             'isAnimatedGif' => $this->isAnimatedGif($file),
-            'config' => $this->getConfig(),
+            'config' => $config,
             'data' => $GLOBALS['TSFE']->cObj->data,
             'file' => $file,
             'options' => $options,
@@ -122,6 +127,48 @@ class ResponsiveImageRenderer implements FileRendererInterface
         }
 
         return $registry->getImageVariant($imageVarientConfigKey);
+    }
+
+    /**
+     * @param PictureImageVariant $originalPictureImageVariant
+     * @param int|string $width
+     * @param int|string $height
+     * @return PictureImageVariant
+     */
+    protected function overrideDefaultDimensions(PictureImageVariant $originalPictureImageVariant, $width = null, $height = null): PictureImageVariant
+    {
+        $pictureImageVariant = new PictureImageVariant($originalPictureImageVariant->getKey());
+        $pictureImageVariant->setDefaultWidth((string)$width);
+        $pictureImageVariant->setDefaultHeight((string)$height);
+
+        $this->addOverrideSources($pictureImageVariant, $originalPictureImageVariant->getAllSourceConfig());
+
+        return $pictureImageVariant;
+    }
+
+    protected function addOverrideSources(PictureImageVariant $pictureImageVariant, array $sources)
+    {
+        foreach ($sources as $source) {
+            foreach ($source['srcset'] as $key => $srcset) {
+                $multiplier = (int) $key;
+                $source['srcset'][$key]['width'] = $this->getMultipliedDimension($multiplier, $pictureImageVariant->getDefaultWidth());
+                $source['srcset'][$key]['height'] = $this->getMultipliedDimension($multiplier, $pictureImageVariant->getDefaultHeight());
+            }
+            $pictureImageVariant->addSourceConfig($source['media'], $source['srcset'], $source['croppingVariantKey']);
+        }
+    }
+
+    /**
+     * @param int $multiplier
+     * @param int|string $dimension
+     * @return string
+     */
+    protected function getMultipliedDimension(int $multiplier, $dimension): string
+    {
+        $value = (int)$dimension;
+        $modifier = str_replace($value, '', $dimension);
+
+        return ($value * $multiplier) . $modifier;
     }
 
     /**
